@@ -1,20 +1,36 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from './context/AuthContext';
 import ProtectedRoute, { ROLE_DEFAULT_ROUTES } from './components/ProtectedRoute';
 import MainLayout from './layouts/MainLayout';
+// Login is kept as an eager import — it is the first screen for unauthenticated
+// users and must render without any dynamic-import delay.
 import Login from './pages/Login';
-import AdminEmployes    from './pages/AdminEmployes';
-import AdminDepartements from './pages/AdminDepartements';
-import AdminServices     from './pages/AdminServices';
-import AdminJoursFeries  from './pages/AdminJoursFeries';
-import AdminTypeConges         from './pages/AdminTypeConges';
-import AdminDemandesConges     from './pages/AdminDemandesConges';
-import ProfilEmploye           from './pages/ProfilEmploye';
-import DemandeConge            from './pages/DemandeConge';
-import Dashboard               from './pages/Dashboard';
-import AdminAbsences           from './pages/AdminAbsences';
-import MesAbsences             from './pages/MesAbsences';
+
+// All authenticated pages are lazy-loaded so their module graphs (including
+// employeService → supabaseAdmin) are never evaluated during the initial boot.
+// This prevents supabaseAdmin from competing for the same navigator.locks lock
+// as the main supabase client during AuthContext initialization.
+const AdminEmployes       = lazy(() => import('./pages/AdminEmployes'));
+const AdminDepartements   = lazy(() => import('./pages/AdminDepartements'));
+const AdminServices       = lazy(() => import('./pages/AdminServices'));
+const AdminJoursFeries    = lazy(() => import('./pages/AdminJoursFeries'));
+const AdminTypeConges     = lazy(() => import('./pages/AdminTypeConges'));
+const AdminDemandesConges = lazy(() => import('./pages/AdminDemandesConges'));
+const AdminAbsences       = lazy(() => import('./pages/AdminAbsences'));
+const ProfilEmploye       = lazy(() => import('./pages/ProfilEmploye'));
+const DemandeConge        = lazy(() => import('./pages/DemandeConge'));
+const Dashboard           = lazy(() => import('./pages/Dashboard'));
+const MesAbsences         = lazy(() => import('./pages/MesAbsences'));
+
+function PageLoader() {
+  return (
+    <Box className="flex h-screen items-center justify-center">
+      <CircularProgress color="primary" />
+    </Box>
+  );
+}
 
 // ── Placeholder ───────────────────────────────────────────────────────────────
 
@@ -47,6 +63,7 @@ function RootRedirect() {
 
 export default function App() {
   return (
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       {/* ── Public ──────────────────────────────────────────────────── */}
       <Route path="/login" element={<Login />} />
@@ -84,5 +101,6 @@ export default function App() {
       {/* ── Catch-all ───────────────────────────────────────────────── */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }

@@ -22,6 +22,9 @@ import { useAuth } from '../context/AuthContext';
 import { useAppTheme } from '../context/ThemeContext';
 import { ROLE_DEFAULT_ROUTES } from '../components/ProtectedRoute';
 
+// Sentinel used to distinguish a timeout rejection from a real error.
+const LOGIN_TIMEOUT = Symbol('login-timeout');
+
 export default function Login() {
   const { session, profile, isLoading: authLoading, login } = useAuth();
   const { mode, toggleTheme } = useAppTheme();
@@ -43,17 +46,35 @@ export default function Login() {
     setError('');
     setIsSubmitting(true);
 
-    const { error: authError } = await login(email, password);
+    try {
+      // Race the sign-in against an 8-second deadline. If the GoTrueClient
+      // ever deadlocks (e.g. a future lock regression), the timeout rejects
+      // with our sentinel so the button is always guaranteed to unblock.
+      const result = await Promise.race([
+        login(email, password),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(LOGIN_TIMEOUT), 8000)
+        ),
+      ]);
 
-    if (authError) {
-      setError('Identifiants incorrects. Veuillez réessayer.');
+      const { error: authError } = result;
+      if (authError) {
+        setError('Identifiants incorrects. Veuillez réessayer.');
+        return;
+      }
+      // AuthContext will update profile via onAuthStateChange.
+      // Navigate to / which uses RootRedirect once profile is ready.
+      navigate('/', { replace: true });
+    } catch (err) {
+      if (err === LOGIN_TIMEOUT) {
+        setError('La connexion a pris trop de temps. Veuillez réessayer.');
+      } else {
+        console.error('[Login] unexpected sign-in error:', err);
+        setError('Une erreur inattendue est survenue. Veuillez réessayer.');
+      }
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    // AuthContext will update profile via onAuthStateChange.
-    // Navigate to / which uses RootRedirect once profile is ready.
-    navigate('/', { replace: true });
   }
 
   const isDark = mode === 'dark';

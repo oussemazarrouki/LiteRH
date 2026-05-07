@@ -12,8 +12,7 @@ import './index.css';
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AppThemeProvider>
-      {/* LocalizationProvider wraps the whole app so every DatePicker
-          uses dayjs with the French locale automatically */}
+      {}
       <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="fr">
         <BrowserRouter>
           <AuthProvider>

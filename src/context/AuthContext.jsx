@@ -35,6 +35,11 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true;
+    // Guards onAuthStateChange from processing any event (SIGNED_IN,
+    // INITIAL_SESSION, etc.) that fires while initializePromise is still
+    // pending. Without this, the SIGNED_IN emitted by _recoverAndRefresh()
+    // causes fetchProfile → getSession → await initializePromise → deadlock.
+    let initCompleted = false;
 
     async function init() {
       try {
@@ -45,18 +50,21 @@ export function AuthProvider({ children }) {
         if (session?.user) await fetchProfile(session.user.id);
       } catch (err) {
         console.error('[AuthContext] init error:', err);
+        if (mounted) { setSession(null); setProfile(null); }
       } finally {
-        // Runs whether init succeeded, failed, or fetchProfile signed out —
-        // guarantees the app is never blocked on the loading spinner.
+        initCompleted = true;
         if (mounted) setIsLoading(false);
       }
     }
 
     init();
 
+    // Only handle events that fire AFTER init() has completed. Events emitted
+    // during initializePromise (INITIAL_SESSION, the SIGNED_IN from
+    // _recoverAndRefresh) are skipped — init() already captured that state.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (!mounted) return;
+      async (event, session) => {
+        if (!mounted || !initCompleted || event === 'INITIAL_SESSION') return;
         setSession(session);
         if (session?.user) {
           await fetchProfile(session.user.id);

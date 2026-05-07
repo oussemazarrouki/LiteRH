@@ -1,14 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-/**
- * Admin client initialized with the service-role key.
- * Required for auth.admin operations (createUser, updateUserById, deleteUser).
- * Keep VITE_SUPABASE_SERVICE_ROLE_KEY out of public repos.
- *
- * persistSession / autoRefreshToken / detectSessionInUrl are all disabled so
- * this client never touches browser storage or navigator.locks — preventing
- * the "Multiple GoTrueClient instances" lock-conflict with the anon client.
- */
+// GoTrueClient derives its navigator.locks lock name from storageKey.
+// If two clients share the same storageKey they compete for the same lock,
+// deadlocking the main client's getSession() on page reload.
+// Using a unique storageKey gives this client its own separate lock,
+// and pointing it at an in-memory store means it never touches localStorage
+// under any code path — eliminating all contention with the anon client.
+const memoryStorage = {
+  _store: new Map(),
+  getItem(key)        { return this._store.get(key) ?? null; },
+  setItem(key, value) { this._store.set(key, value); },
+  removeItem(key)     { this._store.delete(key); },
+};
+
 export const supabaseAdmin = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
@@ -17,6 +21,8 @@ export const supabaseAdmin = createClient(
       autoRefreshToken:   false,
       persistSession:     false,
       detectSessionInUrl: false,
+      storageKey:         'supabase-admin-auth-token',
+      storage:            memoryStorage,
     },
   }
 );
